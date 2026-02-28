@@ -9,6 +9,39 @@ const PAGE_ITEMS = [
 ];
 
 const PERMISSION_ORDER = ['view', 'create', 'update', 'delete', 'assign', 'approve'];
+const PERMISSION_LABELS = {
+  view: 'перегляд',
+  create: 'створення',
+  update: 'оновлення',
+  delete: 'видалення',
+  assign: 'призначення',
+  approve: 'погодження'
+};
+const RISK_LABELS = {
+  low: 'низький',
+  medium: 'середній',
+  high: 'високий',
+  critical: 'критичний'
+};
+const ROLE_NAME_LABELS = {
+  Owner: 'Власник',
+  'Security Admin': 'Адміністратор безпеки',
+  'Finance Manager': 'Фінансовий менеджер',
+  'Support Operator': 'Оператор підтримки',
+  Auditor: 'Аудитор'
+};
+const GROUP_NAME_LABELS = {
+  'Finance Team': 'Фінансова команда',
+  'Support Desk': 'Служба підтримки'
+};
+
+function localizeRoleName(name) {
+  return ROLE_NAME_LABELS[name] || name;
+}
+
+function localizeGroupName(name) {
+  return GROUP_NAME_LABELS[name] || name;
+}
 
 function formatDate(value) {
   if (!value) return 'н/д';
@@ -412,13 +445,13 @@ function UsersPage({ actor, onDataChanged, onNotify }) {
     const errors = {};
 
     if (!candidate.name.trim()) {
-      errors.name = 'Ім'я обов'язкове';
+      errors.name = "Ім'я обов'язкове";
     }
 
     if (!candidate.email.trim()) {
-      errors.email = 'Email обов'язковий';
+      errors.email = 'Електронна пошта обовʼязкова';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate.email.trim())) {
-      errors.email = 'Невірний формат email';
+      errors.email = 'Невірний формат електронної пошти';
     }
 
     return errors;
@@ -560,7 +593,7 @@ function UsersPage({ actor, onDataChanged, onNotify }) {
       >
         <div className="filters-row">
           <input
-            placeholder="Пошук за ім'ям або email"
+            placeholder="Пошук за ім'ям або електронною поштою"
             value={query.search}
             onChange={(event) => setQuery((prev) => ({ ...prev, search: event.target.value, page: 1 }))}
           />
@@ -607,7 +640,7 @@ function UsersPage({ actor, onDataChanged, onNotify }) {
                   </th>
                   <th>
                     <button className="sort-btn" onClick={() => setSort('email')}>
-                      Email {query.sortBy === 'email' ? (query.sortDir === 'asc' ? '▲' : '▼') : ''}
+                      Ел. пошта {query.sortBy === 'email' ? (query.sortDir === 'asc' ? '▲' : '▼') : ''}
                     </button>
                   </th>
                   <th>Статус</th>
@@ -668,7 +701,7 @@ function UsersPage({ actor, onDataChanged, onNotify }) {
             </label>
 
             <label>
-              Email
+              Електронна пошта
               <input
                 value={editor.email}
                 onChange={(event) => setEditor((prev) => ({ ...prev, email: event.target.value }))}
@@ -731,7 +764,7 @@ function UsersPage({ actor, onDataChanged, onNotify }) {
                           );
                         }}
                       />
-                      <span>{role.name}</span>
+                      <span>{localizeRoleName(role.name)}</span>
                     </label>
                   ))}
                 </div>
@@ -751,7 +784,7 @@ function UsersPage({ actor, onDataChanged, onNotify }) {
                           );
                         }}
                       />
-                      <span>{group.name}</span>
+                      <span>{localizeGroupName(group.name)}</span>
                     </label>
                   ))}
                 </div>
@@ -788,10 +821,10 @@ function UsersPage({ actor, onDataChanged, onNotify }) {
               Користувач: <strong>{previewState.data.user.name}</strong> ({previewState.data.user.email})
             </p>
             <p>
-              Прямі ролі: {previewState.data.directRoles.map((role) => role.name).join(', ') || 'немає'}
+              Прямі ролі: {previewState.data.directRoles.map((role) => localizeRoleName(role.name)).join(', ') || 'немає'}
             </p>
             <p>
-              Успадковані ролі через групи: {previewState.data.groupRoles.map((role) => `${role.name} через ${role.group_name}`).join(', ') || 'немає'}
+              Успадковані ролі через групи: {previewState.data.groupRoles.map((role) => `${localizeRoleName(role.name)} через ${localizeGroupName(role.group_name)}`).join(', ') || 'немає'}
             </p>
 
             {previewState.data.warnings.length > 0 ? (
@@ -810,7 +843,7 @@ function UsersPage({ actor, onDataChanged, onNotify }) {
               {previewState.data.effective.map((resource) => (
                 <div key={resource.resourceKey} className="resource-chip">
                   <strong>{resource.resourceLabel}</strong>
-                  <span>{resource.permissions.join(', ') || 'немає'}</span>
+                  <span>{resource.permissions.map((permission) => PERMISSION_LABELS[permission] || permission).join(', ') || 'немає'}</span>
                 </div>
               ))}
             </div>
@@ -837,7 +870,7 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
       const data = await window.api.rbac.getMatrixData();
       setState({ loading: false, error: '', data });
     } catch (error) {
-      setState({ loading: false, error: error.message || 'Failed to load matrix', data: null });
+      setState({ loading: false, error: error.message || 'Не вдалося завантажити матрицю прав', data: null });
     }
   };
 
@@ -889,7 +922,7 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
     if (!selectedCell) return;
 
     const confirmed = window.confirm(
-      `Confirm permission update for role "${selectedCell.role.name}" on resource "${selectedCell.resource.label}"?`
+      `Підтвердити зміну прав для ролі "${localizeRoleName(selectedCell.role.name)}" на ресурсі "${selectedCell.resource.label}"?`
     );
 
     if (!confirmed) return;
@@ -904,16 +937,16 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
       });
 
       await window.api.native.notify({
-        title: 'Permission matrix updated',
-        body: `${selectedCell.role.name} / ${selectedCell.resource.label}`
+        title: 'Матрицю прав оновлено',
+        body: `${localizeRoleName(selectedCell.role.name)} / ${selectedCell.resource.label}`
       });
 
       await load();
       onDataChanged();
-      onNotify('Permissions updated', 'success');
+      onNotify('Права оновлено', 'success');
       setSelectedCell(null);
     } catch (error) {
-      onNotify(error.message || 'Failed to update permissions', 'error');
+      onNotify(error.message || 'Не вдалося оновити права', 'error');
     } finally {
       setSavingCell(false);
     }
@@ -922,10 +955,10 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
   const validateRole = () => {
     const errors = {};
     if (!roleEditor.name.trim()) {
-      errors.name = 'Role name is required';
+      errors.name = 'Назва ролі обовʼязкова';
     }
     if (!Number.isFinite(Number(roleEditor.priority))) {
-      errors.priority = 'Priority must be numeric';
+      errors.priority = 'Пріоритет має бути числом';
     }
     return errors;
   };
@@ -949,11 +982,11 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
       });
       await load();
       onDataChanged();
-      onNotify(roleEditor.id ? 'Role updated' : 'Role created', 'success');
+      onNotify(roleEditor.id ? 'Роль оновлено' : 'Роль створено', 'success');
       setRoleEditor({ id: null, name: '', description: '', priority: 10 });
       setRoleErrors({});
     } catch (error) {
-      onNotify(error.message || 'Failed to save role', 'error');
+      onNotify(error.message || 'Не вдалося зберегти роль', 'error');
     } finally {
       setSavingRole(false);
     }
@@ -964,12 +997,12 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
 
   return (
     <div className="stack">
-      <SectionCard title="Permissions Matrix" subtitle="Roles x Resources with side-panel editing to reduce visual overload">
+      <SectionCard title="Матриця прав" subtitle="Ролі × ресурси, детальне редагування у бічній панелі">
         <div className="matrix-wrapper">
           <table className="table matrix-table">
             <thead>
               <tr>
-                <th>Role</th>
+                <th>Роль</th>
                 {state.data.resources.map((resource) => (
                   <th key={resource.id}>{resource.label}</th>
                 ))}
@@ -988,9 +1021,9 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
                         priority: role.priority
                       })}
                     >
-                      {role.name}
+                      {localizeRoleName(role.name)}
                     </button>
-                    <div className="muted">Priority {role.priority}</div>
+                    <div className="muted">Пріоритет {role.priority}</div>
                   </td>
                   {state.data.resources.map((resource) => {
                     const permissions = cellPermissions(role.id, resource.id).sort(
@@ -1004,7 +1037,7 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
                           onClick={() => openCell(role, resource)}
                         >
                           <strong>{permissions.length}</strong>
-                          <span>{permissions.join(', ') || 'немає'}</span>
+                          <span>{permissions.map((permission) => PERMISSION_LABELS[permission] || permission).join(', ') || 'немає'}</span>
                         </button>
                       </td>
                     );
@@ -1017,7 +1050,7 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
 
         {selectedCell ? (
           <div className="side-panel">
-            <h4>Редагувати Cell</h4>
+            <h4>Редагування комірки</h4>
             <p>
               <strong>{selectedCell.role.name}</strong> / <strong>{selectedCell.resource.label}</strong>
             </p>
@@ -1032,7 +1065,7 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
                   />
                   <span>
                     {permission.label}
-                    <em className={`risk ${permission.risk_level}`}>{permission.risk_level}</em>
+                    <em className={`risk ${permission.risk_level}`}>{RISK_LABELS[permission.risk_level] || permission.risk_level}</em>
                   </span>
                 </label>
               ))}
@@ -1040,10 +1073,10 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
 
             <div className="form-actions">
               <button className="btn" onClick={saveCell} disabled={savingCell}>
-                {savingCell ? 'Збереження…' : 'Save Permissions'}
+                {savingCell ? 'Збереження…' : 'Зберегти права'}
               </button>
               <button className="btn ghost" onClick={() => setSelectedCell(null)}>
-                Cancel
+                Скасувати
               </button>
             </div>
           </div>
@@ -1051,20 +1084,20 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
       </SectionCard>
 
       <div className="grid-2">
-        <SectionCard title={roleEditor.id ? 'Редагувати Role' : 'Create Role'} subtitle="Identity first, metadata second">
+        <SectionCard title={roleEditor.id ? 'Редагувати роль' : 'Створити роль'} subtitle="Спочатку назва ролі, потім опис і пріоритет">
           <form className="form" onSubmit={saveRole}>
             <label>
-              Role name
+              Назва ролі
               <input
                 value={roleEditor.name}
                 onChange={(event) => setRoleEditor((prev) => ({ ...prev, name: event.target.value }))}
-                placeholder="e.g. Project Supervisor"
+                placeholder="наприклад: Керівник проєкту"
               />
               {roleErrors.name ? <span className="field-error">{roleErrors.name}</span> : null}
             </label>
 
             <label>
-              Description
+              Опис
               <textarea
                 rows={3}
                 value={roleEditor.description}
@@ -1073,7 +1106,7 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
             </label>
 
             <label>
-              Priority
+              Пріоритет
               <input
                 type="number"
                 value={roleEditor.priority}
@@ -1084,7 +1117,7 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
 
             <div className="form-actions">
               <button className="btn" type="submit" disabled={savingRole}>
-                {savingRole ? 'Збереження…' : roleEditor.id ? 'Update Role' : 'Create Role'}
+                {savingRole ? 'Збереження…' : roleEditor.id ? 'Оновити роль' : 'Створити роль'}
               </button>
               <button
                 className="btn ghost"
@@ -1100,10 +1133,10 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
           </form>
         </SectionCard>
 
-        <SectionCard title="Risk Hints" subtitle="Conflict and excessive-rights heuristics">
+        <SectionCard title="Попередження про ризики" subtitle="Конфліктні та надмірні права">
           <div className="stack gap-sm">
             {state.data.roleWarnings.filter((item) => item.warnings.length > 0).length === 0 ? (
-              <div className="state ok">No role-level warnings currently triggered.</div>
+              <div className="state ok">Наразі попереджень для ролей немає.</div>
             ) : (
               state.data.roleWarnings
                 .filter((item) => item.warnings.length > 0)
@@ -1111,7 +1144,7 @@ function RolesPage({ actor, onDataChanged, onNotify }) {
                   const role = state.data.roles.find((candidate) => candidate.id === item.roleId);
                   return (
                     <div className="warning-block" key={item.roleId}>
-                      <strong>{role ? role.name : `Role #${item.roleId}`}</strong>
+                      <strong>{role ? localizeRoleName(role.name) : `Роль #${item.roleId}`}</strong>
                       <ul className="plain-list">
                         {item.warnings.map((warning, index) => (
                           <li key={`${item.roleId}-${index}`}>{warning.message}</li>
@@ -1147,7 +1180,7 @@ function GroupsPage({ actor, onDataChanged, onNotify }) {
       const data = await window.api.rbac.getGroups();
       setGroupsState({ loading: false, error: '', data });
     } catch (error) {
-      setGroupsState({ loading: false, error: error.message || 'Failed to load groups', data: null });
+      setGroupsState({ loading: false, error: error.message || 'Не вдалося завантажити групи', data: null });
     }
   };
 
@@ -1174,7 +1207,7 @@ function GroupsPage({ actor, onDataChanged, onNotify }) {
       setSelectedRoleIds(data.roleIds);
       setSelectedUserIds(data.userIds);
     } catch (error) {
-      onNotify(error.message || 'Failed to load group assignments', 'error');
+      onNotify(error.message || 'Не вдалося завантажити призначення групи', 'error');
     } finally {
       setAssignmentLoading(false);
     }
@@ -1182,7 +1215,7 @@ function GroupsPage({ actor, onDataChanged, onNotify }) {
 
   const validateGroup = () => {
     const errors = {};
-    if (!groupEditor.name.trim()) errors.name = 'Group name is required';
+    if (!groupEditor.name.trim()) errors.name = 'Назва групи обовʼязкова';
     return errors;
   };
 
@@ -1200,9 +1233,9 @@ function GroupsPage({ actor, onDataChanged, onNotify }) {
       onDataChanged();
       await loadGroups();
       await loadCatalogs();
-      onNotify(groupEditor.id ? 'Group updated' : 'Group created', 'success');
+      onNotify(groupEditor.id ? 'Групу оновлено' : 'Групу створено', 'success');
     } catch (error) {
-      onNotify(error.message || 'Failed to save group', 'error');
+      onNotify(error.message || 'Не вдалося зберегти групу', 'error');
     } finally {
       setSavingGroup(false);
     }
@@ -1212,7 +1245,7 @@ function GroupsPage({ actor, onDataChanged, onNotify }) {
     if (!selectedGroupId) return;
 
     const group = groupsState.data.find((item) => item.id === selectedGroupId);
-    const confirmed = window.confirm(`Apply assignments for group "${group?.name || selectedGroupId}"?`);
+    const confirmed = window.confirm(`Підтвердити призначення для групи "${group ? localizeGroupName(group.name) : selectedGroupId}"?`);
     if (!confirmed) return;
 
     setAssignmentLoading(true);
@@ -1232,9 +1265,9 @@ function GroupsPage({ actor, onDataChanged, onNotify }) {
       onDataChanged();
       await loadGroups();
       await loadCatalogs();
-      onNotify('Group assignments updated', 'success');
+      onNotify('Призначення групи оновлено', 'success');
     } catch (error) {
-      onNotify(error.message || 'Failed to update group assignments', 'error');
+      onNotify(error.message || 'Не вдалося оновити призначення групи', 'error');
     } finally {
       setAssignmentLoading(false);
     }
@@ -1249,29 +1282,29 @@ function GroupsPage({ actor, onDataChanged, onNotify }) {
   return (
     <div className="stack">
       <div className="grid-2">
-        <SectionCard title="Groups" subtitle="Role bundles for easier assignment">
+        <SectionCard title="Групи" subtitle="Набори ролей для швидшого призначення доступу">
           {groupsState.data.length === 0 ? (
-            <EmptyState text="No groups found" />
+            <EmptyState text="Груп не знайдено" />
           ) : (
             <table className="table compact">
               <thead>
                 <tr>
-                  <th>Ім'я</th>
-                  <th>Users</th>
-                  <th>Roles</th>
+                  <th>Назва</th>
+                  <th>Користувачі</th>
+                  <th>Ролі</th>
                   <th>Дії</th>
                 </tr>
               </thead>
               <tbody>
                 {groupsState.data.map((group) => (
                   <tr key={group.id}>
-                    <td>{group.name}</td>
+                    <td>{localizeGroupName(group.name)}</td>
                     <td>{group.users_count}</td>
                     <td>{group.roles_count}</td>
                     <td>
                       <div className="row-actions">
                         <button className="btn tiny" onClick={() => setGroupEditor(group)}>Редагувати</button>
-                        <button className="btn tiny ghost" onClick={() => openAssignments(group)}>Manage</button>
+                        <button className="btn tiny ghost" onClick={() => openAssignments(group)}>Керувати</button>
                       </div>
                     </td>
                   </tr>
@@ -1281,20 +1314,20 @@ function GroupsPage({ actor, onDataChanged, onNotify }) {
           )}
         </SectionCard>
 
-        <SectionCard title={groupEditor.id ? 'Редагувати Group' : 'Create Group'} subtitle="Group identity before permissions">
+        <SectionCard title={groupEditor.id ? 'Редагувати групу' : 'Створити групу'} subtitle="Спочатку назва групи, потім опис">
           <form className="form" onSubmit={saveGroup}>
             <label>
-              Group name
+              Назва групи
               <input
                 value={groupEditor.name}
                 onChange={(event) => setGroupEditor((prev) => ({ ...prev, name: event.target.value }))}
-                placeholder="e.g. Incident Response"
+                placeholder="наприклад: Реагування на інциденти"
               />
               {groupErrors.name ? <span className="field-error">{groupErrors.name}</span> : null}
             </label>
 
             <label>
-              Description
+              Опис
               <textarea
                 rows={3}
                 value={groupEditor.description || ''}
@@ -1304,7 +1337,7 @@ function GroupsPage({ actor, onDataChanged, onNotify }) {
 
             <div className="form-actions">
               <button className="btn" type="submit" disabled={savingGroup}>
-                {savingGroup ? 'Збереження…' : groupEditor.id ? 'Update Group' : 'Create Group'}
+                {savingGroup ? 'Збереження…' : groupEditor.id ? 'Оновити групу' : 'Створити групу'}
               </button>
               <button
                 className="btn ghost"
@@ -1321,13 +1354,13 @@ function GroupsPage({ actor, onDataChanged, onNotify }) {
         </SectionCard>
       </div>
 
-      <SectionCard title="Group Assignments" subtitle="Attach roles and members to selected group">
+      <SectionCard title="Призначення групи" subtitle="Призначайте ролі та учасників обраній групі">
         {!selectedGroup ? (
-          <EmptyState text="Choose a group and click Manage" />
+          <EmptyState text="Виберіть групу і натисніть «Керувати»" />
         ) : (
           <div className="grid-2">
             <div className="stack gap-sm">
-              <h4>Roles for {selectedGroup.name}</h4>
+              <h4>Ролі для {localizeGroupName(selectedGroup.name)}</h4>
               <div className="chips-grid">
                 {catalogsState.data.roles.map((role) => (
                   <label key={role.id} className="chip-check">
@@ -1342,14 +1375,14 @@ function GroupsPage({ actor, onDataChanged, onNotify }) {
                         );
                       }}
                     />
-                    <span>{role.name}</span>
+                    <span>{localizeRoleName(role.name)}</span>
                   </label>
                 ))}
               </div>
             </div>
 
             <div className="stack gap-sm">
-              <h4>Members</h4>
+              <h4>Учасники</h4>
               <div className="chips-grid">
                 {catalogsState.data.users.map((user) => (
                   <label key={user.id} className="chip-check">
@@ -1404,7 +1437,7 @@ function AuditPage({ actor, onNotify, refreshToken }) {
       const data = await window.api.rbac.getAuditLogs({ ...query, search: debouncedSearch });
       setState({ loading: false, error: '', data });
     } catch (error) {
-      setState({ loading: false, error: error.message || 'Failed to load audit log', data: null });
+      setState({ loading: false, error: error.message || 'Не вдалося завантажити журнал аудиту', data: null });
     }
   };
 
@@ -1416,31 +1449,31 @@ function AuditPage({ actor, onNotify, refreshToken }) {
     try {
       const result = await window.api.rbac.exportAuditLogs({ actor });
       if (result.canceled) {
-        onNotify('Export cancelled', 'info');
+        onNotify('Експорт скасовано', 'info');
         return;
       }
 
       await window.api.native.notify({
-        title: 'Audit log exported',
-        body: `${result.rowCount} rows saved` 
+        title: 'Журнал аудиту експортовано',
+        body: `${result.rowCount} рядків збережено`
       });
 
-      onNotify(`Exported to ${result.filePath}`, 'success');
+      onNotify(`Експортовано у ${result.filePath}`, 'success');
       await load();
     } catch (error) {
-      onNotify(error.message || 'Export failed', 'error');
+      onNotify(error.message || 'Експорт не вдався', 'error');
     }
   };
 
   return (
     <SectionCard
-      title="Audit Log"
-      subtitle="Track who changed permissions, roles, and assignments"
-      actions={<button className="btn" onClick={exportLog}>Export CSV</button>}
+      title="Журнал аудиту"
+      subtitle="Відстеження змін у дозволах, ролях і призначеннях"
+      actions={<button className="btn" onClick={exportLog}>Експорт CSV</button>}
     >
       <div className="filters-row">
         <input
-          placeholder="Search actor/action/entity"
+          placeholder="Пошук за оператором, дією або сутністю"
           value={query.search}
           onChange={(event) => setQuery((prev) => ({ ...prev, search: event.target.value, page: 1 }))}
         />
@@ -1449,7 +1482,7 @@ function AuditPage({ actor, onNotify, refreshToken }) {
           value={query.action}
           onChange={(event) => setQuery((prev) => ({ ...prev, action: event.target.value, page: 1 }))}
         >
-          <option value="all">All actions</option>
+          <option value="all">Усі дії</option>
           {(state.data?.filters.actions || []).map((action) => (
             <option key={action} value={action}>{action}</option>
           ))}
@@ -1459,7 +1492,7 @@ function AuditPage({ actor, onNotify, refreshToken }) {
           value={query.entityType}
           onChange={(event) => setQuery((prev) => ({ ...prev, entityType: event.target.value, page: 1 }))}
         >
-          <option value="all">All entities</option>
+          <option value="all">Усі сутності</option>
           {(state.data?.filters.entityTypes || []).map((entityType) => (
             <option key={entityType} value={entityType}>{entityType}</option>
           ))}
@@ -1469,8 +1502,8 @@ function AuditPage({ actor, onNotify, refreshToken }) {
           value={query.sortDir}
           onChange={(event) => setQuery((prev) => ({ ...prev, sortDir: event.target.value, page: 1 }))}
         >
-          <option value="desc">Newest first</option>
-          <option value="asc">Oldest first</option>
+          <option value="desc">Спочатку нові</option>
+          <option value="asc">Спочатку старі</option>
         </select>
       </div>
 
@@ -1478,7 +1511,7 @@ function AuditPage({ actor, onNotify, refreshToken }) {
       {state.error ? <ErrorState text={state.error} onRetry={load} /> : null}
 
       {!state.loading && !state.error && state.data?.rows.length === 0 ? (
-        <EmptyState text="No audit events for the selected filters" />
+        <EmptyState text="Для обраних фільтрів подій немає" />
       ) : null}
 
       {!state.loading && !state.error && state.data?.rows.length > 0 ? (
@@ -1486,11 +1519,11 @@ function AuditPage({ actor, onNotify, refreshToken }) {
           <table className="table">
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Actor</th>
-                <th>Action</th>
-                <th>Entity</th>
-                <th>Changes</th>
+                <th>Час</th>
+                <th>Оператор</th>
+                <th>Дія</th>
+                <th>Сутність</th>
+                <th>Зміни</th>
               </tr>
             </thead>
             <tbody>

@@ -6,26 +6,26 @@ const Database = require('better-sqlite3');
 let db;
 
 const RESOURCE_SEED = [
-  { resource_key: 'users', label: 'Users' },
-  { resource_key: 'projects', label: 'Projects' },
-  { resource_key: 'billing', label: 'Billing' },
-  { resource_key: 'reports', label: 'Reports' },
-  { resource_key: 'settings', label: 'Settings' }
+  { resource_key: 'users', label: 'Користувачі' },
+  { resource_key: 'projects', label: 'Проєкти' },
+  { resource_key: 'billing', label: 'Білінг' },
+  { resource_key: 'reports', label: 'Звіти' },
+  { resource_key: 'settings', label: 'Налаштування' }
 ];
 
 const PERMISSION_SEED = [
-  { permission_key: 'view', label: 'View', risk_level: 'low' },
-  { permission_key: 'create', label: 'Create', risk_level: 'medium' },
-  { permission_key: 'update', label: 'Update', risk_level: 'medium' },
-  { permission_key: 'delete', label: 'Delete', risk_level: 'high' },
-  { permission_key: 'assign', label: 'Assign', risk_level: 'high' },
-  { permission_key: 'approve', label: 'Approve', risk_level: 'critical' }
+  { permission_key: 'view', label: 'Перегляд', risk_level: 'low' },
+  { permission_key: 'create', label: 'Створення', risk_level: 'medium' },
+  { permission_key: 'update', label: 'Оновлення', risk_level: 'medium' },
+  { permission_key: 'delete', label: 'Видалення', risk_level: 'high' },
+  { permission_key: 'assign', label: 'Призначення', risk_level: 'high' },
+  { permission_key: 'approve', label: 'Погодження', risk_level: 'critical' }
 ];
 
 const ROLE_PRESETS = [
   {
     name: 'Owner',
-    description: 'Full control over all resources.',
+    description: 'Повний контроль над усіма ресурсами.',
     priority: 100,
     is_system: 1,
     rules: {
@@ -34,7 +34,7 @@ const ROLE_PRESETS = [
   },
   {
     name: 'Security Admin',
-    description: 'Manages identities, role assignments, and security settings.',
+    description: 'Керує ідентичностями, призначенням ролей та налаштуваннями безпеки.',
     priority: 90,
     is_system: 1,
     rules: {
@@ -45,7 +45,7 @@ const ROLE_PRESETS = [
   },
   {
     name: 'Finance Manager',
-    description: 'Handles billing workflows and finance reports.',
+    description: 'Працює з білінгом і фінансовою звітністю.',
     priority: 70,
     is_system: 1,
     rules: {
@@ -56,7 +56,7 @@ const ROLE_PRESETS = [
   },
   {
     name: 'Support Operator',
-    description: 'Supports users and operational incidents.',
+    description: 'Підтримка користувачів та операційних інцидентів.',
     priority: 50,
     is_system: 1,
     rules: {
@@ -67,7 +67,7 @@ const ROLE_PRESETS = [
   },
   {
     name: 'Auditor',
-    description: 'Read-only access for compliance checks.',
+    description: 'Доступ лише для читання для аудиту відповідності.',
     priority: 30,
     is_system: 1,
     rules: {
@@ -77,8 +77,8 @@ const ROLE_PRESETS = [
 ];
 
 const GROUP_SEED = [
-  { name: 'Finance Team', description: 'Finance department operators.' },
-  { name: 'Support Desk', description: 'Customer and internal support.' }
+  { name: 'Finance Team', description: 'Оператори фінансового відділу.' },
+  { name: 'Support Desk', description: 'Підтримка клієнтів та внутрішніх команд.' }
 ];
 
 const USER_SEED = [
@@ -252,10 +252,20 @@ function seedReferenceData() {
 
   for (const resource of RESOURCE_SEED) {
     insertResource.run(resource.resource_key, resource.label);
+    db.prepare(`
+      UPDATE resources
+      SET label = ?
+      WHERE resource_key = ?
+    `).run(resource.label, resource.resource_key);
   }
 
   for (const permission of PERMISSION_SEED) {
     insertPermission.run(permission.permission_key, permission.label, permission.risk_level);
+    db.prepare(`
+      UPDATE permissions
+      SET label = ?, risk_level = ?
+      WHERE permission_key = ?
+    `).run(permission.label, permission.risk_level, permission.permission_key);
   }
 
   for (const role of ROLE_PRESETS) {
@@ -293,6 +303,11 @@ function seedReferenceData() {
   const insertGroup = db.prepare('INSERT OR IGNORE INTO groups_tbl (name, description) VALUES (?, ?)');
   for (const group of GROUP_SEED) {
     insertGroup.run(group.name, group.description);
+    db.prepare(`
+      UPDATE groups_tbl
+      SET description = ?
+      WHERE name = ?
+    `).run(group.description, group.name);
   }
 
   const insertUser = db.prepare('INSERT OR IGNORE INTO users (name, email, status) VALUES (?, ?, ?)');
@@ -337,7 +352,7 @@ function createWindow() {
     height: 820,
     minWidth: 1080,
     minHeight: 700,
-    title: 'Access Control & RBAC Manager',
+    title: 'Керування доступом та RBAC',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -395,6 +410,7 @@ function listRoleNamesForGroup(groupId) {
 function detectWarnings(effectiveByResource) {
   const warnings = [];
   const highRiskKeys = new Set(['delete', 'assign', 'approve']);
+  const resourceLabelByKey = Object.fromEntries(RESOURCE_SEED.map((item) => [item.resource_key, item.label]));
 
   let totalGrants = 0;
   let highRiskGrants = 0;
@@ -408,7 +424,7 @@ function detectWarnings(effectiveByResource) {
     warnings.push({
       severity: 'high',
       type: 'excessive',
-      message: `User has ${totalGrants} permission grants. Review least-privilege boundaries.`
+      message: `Кількість виданих прав: ${totalGrants}. Перевірте принцип найменших привілеїв.`
     });
   }
 
@@ -416,16 +432,17 @@ function detectWarnings(effectiveByResource) {
     warnings.push({
       severity: 'high',
       type: 'high-risk',
-      message: `High-risk grants count is ${highRiskGrants}. Consider splitting duties.`
+      message: `Кількість критичних прав: ${highRiskGrants}. Рекомендується розділення обов'язків.`
     });
   }
 
   for (const [resourceKey, permissions] of Object.entries(effectiveByResource)) {
     if (permissions.includes('delete') && !permissions.includes('view')) {
+      const resourceLabel = resourceLabelByKey[resourceKey] || resourceKey;
       warnings.push({
         severity: 'medium',
         type: 'conflict',
-        message: `${resourceKey}: delete without view can produce unsafe blind actions.`
+        message: `${resourceLabel}: право видалення без права перегляду може призводити до ризикованих дій.`
       });
     }
   }
@@ -435,7 +452,7 @@ function detectWarnings(effectiveByResource) {
     warnings.push({
       severity: 'high',
       type: 'conflict',
-      message: 'Users resource has both assign and delete. Consider two-person control.'
+      message: 'Для ресурсу користувачів одночасно видані assign і delete. Варто застосувати правило двох осіб.'
     });
   }
 
@@ -444,7 +461,7 @@ function detectWarnings(effectiveByResource) {
     warnings.push({
       severity: 'high',
       type: 'conflict',
-      message: 'Billing approvals and deletions are combined in one access profile.'
+      message: 'У білінгу поєднані права погодження і видалення в одному профілі доступу.'
     });
   }
 
@@ -460,7 +477,7 @@ function detectWarnings(effectiveByResource) {
 function getEffectivePermissions(userId) {
   const user = db.prepare('SELECT id, name, email, status FROM users WHERE id = ?').get(userId);
   if (!user) {
-    throw new Error('User not found');
+    throw new Error('Користувача не знайдено');
   }
 
   const directRoles = db.prepare(`
@@ -669,13 +686,13 @@ function registerIpcHandlers() {
     const email = (user.email || '').trim().toLowerCase();
     const status = user.status === 'suspended' ? 'suspended' : 'active';
 
-    if (!name) throw new Error('Name is required');
-    if (!validateEmail(email)) throw new Error('Email format is invalid');
+    if (!name) throw new Error("Ім'я обовʼязкове");
+    if (!validateEmail(email)) throw new Error('Невірний формат email');
 
     try {
       if (user.id) {
         const before = db.prepare('SELECT id, name, email, status FROM users WHERE id = ?').get(user.id);
-        if (!before) throw new Error('User not found');
+        if (!before) throw new Error('Користувача не знайдено');
 
         db.prepare(`
           UPDATE users
@@ -698,7 +715,7 @@ function registerIpcHandlers() {
       return created;
     } catch (error) {
       if (String(error.message).includes('UNIQUE')) {
-        throw new Error('Email must be unique');
+        throw new Error('Email має бути унікальним');
       }
       throw error;
     }
@@ -707,10 +724,10 @@ function registerIpcHandlers() {
   ipcMain.handle('rbac/deleteUser', async (_event, payload = {}) => {
     const userId = Number(payload.userId);
     const actor = payload.actor || 'admin';
-    if (!Number.isFinite(userId)) throw new Error('Invalid user id');
+    if (!Number.isFinite(userId)) throw new Error('Некоректний ID користувача');
 
     const before = db.prepare('SELECT id, name, email, status FROM users WHERE id = ?').get(userId);
-    if (!before) throw new Error('User not found');
+    if (!before) throw new Error('Користувача не знайдено');
 
     db.prepare('DELETE FROM users WHERE id = ?').run(userId);
     logAudit(actor, 'DELETE_USER', 'user', userId, before, null);
@@ -719,7 +736,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle('rbac/getUserAssignments', async (_event, payload = {}) => {
     const userId = Number(payload.userId);
-    if (!Number.isFinite(userId)) throw new Error('Invalid user id');
+    if (!Number.isFinite(userId)) throw new Error('Некоректний ID користувача');
 
     const roleIds = db.prepare('SELECT role_id FROM user_roles WHERE user_id = ?').all(userId).map((item) => item.role_id);
     const groupIds = db.prepare('SELECT group_id FROM user_groups WHERE user_id = ?').all(userId).map((item) => item.group_id);
@@ -731,7 +748,7 @@ function registerIpcHandlers() {
     const userId = Number(payload.userId);
     const actor = payload.actor || 'admin';
     const roleIds = [...new Set((payload.roleIds || []).map((id) => Number(id)).filter((id) => Number.isFinite(id)))];
-    if (!Number.isFinite(userId)) throw new Error('Invalid user id');
+    if (!Number.isFinite(userId)) throw new Error('Некоректний ID користувача');
 
     const before = listRoleNamesForUser(userId);
 
@@ -755,7 +772,7 @@ function registerIpcHandlers() {
     const userId = Number(payload.userId);
     const actor = payload.actor || 'admin';
     const groupIds = [...new Set((payload.groupIds || []).map((id) => Number(id)).filter((id) => Number.isFinite(id)))];
-    if (!Number.isFinite(userId)) throw new Error('Invalid user id');
+    if (!Number.isFinite(userId)) throw new Error('Некоректний ID користувача');
 
     const before = listGroupNamesForUser(userId);
 
@@ -777,7 +794,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle('rbac/previewEffectivePermissions', async (_event, payload = {}) => {
     const userId = Number(payload.userId);
-    if (!Number.isFinite(userId)) throw new Error('Invalid user id');
+    if (!Number.isFinite(userId)) throw new Error('Некоректний ID користувача');
     return getEffectivePermissions(userId);
   });
 
@@ -804,12 +821,12 @@ function registerIpcHandlers() {
     const description = (role.description || '').trim();
     const priority = Number.isFinite(Number(role.priority)) ? Number(role.priority) : 0;
 
-    if (!name) throw new Error('Role name is required');
+    if (!name) throw new Error('Назва ролі обовʼязкова');
 
     try {
       if (role.id) {
         const before = db.prepare('SELECT id, name, description, priority FROM roles WHERE id = ?').get(role.id);
-        if (!before) throw new Error('Role not found');
+        if (!before) throw new Error('Роль не знайдено');
 
         db.prepare(`
           UPDATE roles
@@ -847,7 +864,7 @@ function registerIpcHandlers() {
       return created;
     } catch (error) {
       if (String(error.message).includes('UNIQUE')) {
-        throw new Error('Role name must be unique');
+        throw new Error('Назва ролі має бути унікальною');
       }
       throw error;
     }
@@ -873,12 +890,12 @@ function registerIpcHandlers() {
     const name = (group.name || '').trim();
     const description = (group.description || '').trim();
 
-    if (!name) throw new Error('Group name is required');
+    if (!name) throw new Error('Назва групи обовʼязкова');
 
     try {
       if (group.id) {
         const before = db.prepare('SELECT id, name, description FROM groups_tbl WHERE id = ?').get(group.id);
-        if (!before) throw new Error('Group not found');
+        if (!before) throw new Error('Групу не знайдено');
 
         db.prepare(`
           UPDATE groups_tbl
@@ -901,7 +918,7 @@ function registerIpcHandlers() {
       return created;
     } catch (error) {
       if (String(error.message).includes('UNIQUE')) {
-        throw new Error('Group name must be unique');
+        throw new Error('Назва групи має бути унікальною');
       }
       throw error;
     }
@@ -909,7 +926,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle('rbac/getGroupAssignments', async (_event, payload = {}) => {
     const groupId = Number(payload.groupId);
-    if (!Number.isFinite(groupId)) throw new Error('Invalid group id');
+    if (!Number.isFinite(groupId)) throw new Error('Некоректний ID групи');
 
     const roleIds = db.prepare('SELECT role_id FROM group_roles WHERE group_id = ?').all(groupId).map((item) => item.role_id);
     const userIds = db.prepare('SELECT user_id FROM user_groups WHERE group_id = ?').all(groupId).map((item) => item.user_id);
@@ -920,7 +937,7 @@ function registerIpcHandlers() {
     const groupId = Number(payload.groupId);
     const actor = payload.actor || 'admin';
     const roleIds = [...new Set((payload.roleIds || []).map((id) => Number(id)).filter((id) => Number.isFinite(id)))];
-    if (!Number.isFinite(groupId)) throw new Error('Invalid group id');
+    if (!Number.isFinite(groupId)) throw new Error('Некоректний ID групи');
 
     const before = listRoleNamesForGroup(groupId);
 
@@ -944,7 +961,7 @@ function registerIpcHandlers() {
     const groupId = Number(payload.groupId);
     const actor = payload.actor || 'admin';
     const userIds = [...new Set((payload.userIds || []).map((id) => Number(id)).filter((id) => Number.isFinite(id)))];
-    if (!Number.isFinite(groupId)) throw new Error('Invalid group id');
+    if (!Number.isFinite(groupId)) throw new Error('Некоректний ID групи');
 
     const before = db.prepare(`
       SELECT u.name
@@ -1008,7 +1025,7 @@ function registerIpcHandlers() {
     const permissionKeys = [...new Set((payload.permissionKeys || []).map((item) => String(item)))];
 
     if (!Number.isFinite(roleId) || !Number.isFinite(resourceId)) {
-      throw new Error('Role and resource are required');
+      throw new Error('Потрібно вказати роль і ресурс');
     }
 
     const validPermissionKeys = new Set(
@@ -1017,7 +1034,7 @@ function registerIpcHandlers() {
 
     for (const key of permissionKeys) {
       if (!validPermissionKeys.has(key)) {
-        throw new Error(`Unknown permission: ${key}`);
+        throw new Error(`Невідомий дозвіл: ${key}`);
       }
     }
 
@@ -1140,7 +1157,7 @@ function registerIpcHandlers() {
 
     const defaultName = `rbac-audit-${new Date().toISOString().slice(0, 10)}.csv`;
     const saveResult = await dialog.showSaveDialog({
-      title: 'Export Audit Log',
+      title: 'Експорт журналу аудиту',
       defaultPath: path.join(app.getPath('documents'), defaultName),
       filters: [{ name: 'CSV', extensions: ['csv'] }]
     });
@@ -1177,7 +1194,7 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('native/notify', async (_event, payload = {}) => {
-    const title = payload.title || 'RBAC Manager';
+    const title = payload.title || 'RBAC менеджер';
     const body = payload.body || '';
 
     if (Notification.isSupported()) {
