@@ -111,6 +111,63 @@ function csvEscape(value) {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
+function parseCsvRows(content) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+
+    if (inQuotes) {
+      if (char === '"') {
+        if (content[index + 1] === '"') {
+          cell += '"';
+          index += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cell += char;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = true;
+      continue;
+    }
+
+    if (char === ',') {
+      row.push(cell);
+      cell = '';
+      continue;
+    }
+
+    if (char === '\n') {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = '';
+      continue;
+    }
+
+    if (char === '\r') {
+      continue;
+    }
+
+    cell += char;
+  }
+
+  if (cell.length > 0 || row.length > 0) {
+    row.push(cell);
+    rows.push(row);
+  }
+
+  return rows;
+}
+
 function normalizePage(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
@@ -1173,6 +1230,187 @@ function registerIpcHandlers() {
       canceled: false,
       filePath: saveResult.filePath,
       rowCount: rows.length
+    };
+  });
+
+  ipcMain.handle('rbac/exportUsersCsv', async (_event, payload = {}) => {
+    const actor = payload.actor || 'admin';
+
+    const rows = db.prepare(`
+      SELECT
+        u.id,
+        u.name,
+        u.email,
+        u.status,
+        u.created_at,
+        u.updated_at,
+        COALESCE((
+          SELECT GROUP_CONCAT(r.name, '; ')
+          FROM user_roles ur
+          JOIN roles r ON r.id = ur.role_id
+          WHERE ur.user_id = u.id
+        ), '') AS direct_roles,
+        COALESCE((
+          SELECT GROUP_CONCAT(g.name, '; ')
+          FROM user_groups ug
+          JOIN groups_tbl g ON g.id = ug.group_id
+          WHERE ug.user_id = u.id
+        ), '') AS groups
+      FROM users u
+      ORDER BY u.name ASC, u.id ASC
+    `).all();
+
+    const defaultName = `rbac-users-${new Date().toISOString().slice(0, 10)}.csv`;
+    const saveResult = await dialog.showSaveDialog({
+      title: 'Export Users CSV',
+      defaultPath: path.join(app.getPath('documents'), defaultName),
+      filters: [{ name: 'CSV', extensions: ['csv'] }]
+    });
+
+    if (saveResult.canceled || !saveResult.filePath) {
+      return { canceled: true };
+    }
+
+    const header = ['id', 'name', 'email', 'status', 'created_at', 'updated_at', 'direct_roles', 'groups'];
+    const lines = [header.map(csvEscape).join(',')];
+
+    for (const row of rows) {
+      lines.push([
+        row.id,
+        row.name,
+        row.email,
+        row.status,
+        row.created_at,
+        row.updated_at,
+        row.direct_roles,
+        row.groups
+      ].map(csvEscape).join(','));
+    }
+
+    fs.writeFileSync(saveResult.filePath, `${lines.join('\n')}\n`, 'utf8');
+
+    logAudit(actor, 'EXPORT_USERS_CSV', 'user', null, { row_count: rows.length }, { file_path: saveResult.filePath });
+
+    return {
+      canceled: false,
+      filePath: saveResult.filePath,
+      rowCount: rows.length
+    };
+  });
+
+  ipcMain.handle('rbac/importUsersCsv', async (_event, payload = {}) => {
+    const actor = payload.actor || 'admin';
+
+    const openResult = await dialog.showOpenDialog({
+      title: 'Import Users CSV',
+      properties: ['openFile'],
+      filters: [{ name: 'CSV', extensions: ['csv'] }]
+    });
+
+    if (openResult.canceled || !openResult.filePaths || openResult.filePaths.length === 0) {
+      return { canceled: true };
+    }
+
+    const filePath = openResult.filePaths[0];
+    const content = fs.readFileSync(filePath, 'utf8');
+    const rows = parseCsvRows(content).filter((row) => row.some((cell) => String(cell || '').trim()));
+
+    if (rows.length === 0) {
+      throw new Error('CSV is empty');
+    }
+
+    const header = rows[0].map((cell) => String(cell || '').trim().toLowerCase());
+    const dataRows = rows.slice(1);
+
+    const indexByName = Object.fromEntries(header.map((name, index) => [name, index]));
+    const emailIndex = indexByName.email;
+    const nameIndex = indexByName.name;
+    const statusIndex = indexByName.status;
+
+    if (!Number.isInteger(emailIndex)) {
+      throw new Error('CSV must include column "email"');
+    }
+
+    const selectByEmail = db.prepare('SELECT id, name, email, status FROM users WHERE email = ?');
+    const insertUser = db.prepare('INSERT INTO users (name, email, status) VALUES (?, ?, ?)');
+    const updateUser = db.prepare(`
+      UPDATE users
+      SET name = ?, status = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `);
+
+    const summary = {
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      invalid: 0,
+      errors: []
+    };
+
+    const runImport = db.transaction(() => {
+      dataRows.forEach((row, rowIndex) => {
+        const lineNo = rowIndex + 2;
+        const email = String(row[emailIndex] || '').trim().toLowerCase();
+        const fallbackName = email.includes('@') ? email.split('@')[0] : '';
+        const name = String(row[nameIndex] || '').trim() || fallbackName;
+        const rawStatus = String(row[statusIndex] || '').trim().toLowerCase();
+        const status = rawStatus === 'suspended' ? 'suspended' : 'active';
+
+        if (!email || !validateEmail(email)) {
+          summary.invalid += 1;
+          if (summary.errors.length < 15) {
+            summary.errors.push(`Line ${lineNo}: invalid email`);
+          }
+          return;
+        }
+
+        if (!name) {
+          summary.invalid += 1;
+          if (summary.errors.length < 15) {
+            summary.errors.push(`Line ${lineNo}: missing name`);
+          }
+          return;
+        }
+
+        const existing = selectByEmail.get(email);
+        if (existing) {
+          if (existing.name === name && existing.status === status) {
+            summary.skipped += 1;
+            return;
+          }
+
+          const before = { ...existing };
+          updateUser.run(name, status, existing.id);
+          const after = selectByEmail.get(email);
+          summary.updated += 1;
+          logAudit(actor, 'IMPORT_UPDATE_USER', 'user', existing.id, before, after);
+          return;
+        }
+
+        const info = insertUser.run(name, email, status);
+        const created = db.prepare('SELECT id, name, email, status FROM users WHERE id = ?').get(info.lastInsertRowid);
+        summary.created += 1;
+        logAudit(actor, 'IMPORT_CREATE_USER', 'user', info.lastInsertRowid, null, created);
+      });
+    });
+
+    runImport();
+
+    logAudit(actor, 'IMPORT_USERS_CSV', 'user', null, {
+      file_path: filePath,
+      rows: dataRows.length
+    }, {
+      created: summary.created,
+      updated: summary.updated,
+      skipped: summary.skipped,
+      invalid: summary.invalid
+    });
+
+    return {
+      canceled: false,
+      filePath,
+      rowCount: dataRows.length,
+      ...summary
     };
   });
 

@@ -74,6 +74,10 @@ strong,
 }
 
 .sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
   border-right: 1px solid var(--line);
   background: linear-gradient(160deg, var(--panel-2), transparent 90%);
   backdrop-filter: blur(12px);
@@ -157,9 +161,13 @@ strong,
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 100vh;
 }
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   padding: 18px 24px;
   display: flex;
   justify-content: space-between;
@@ -185,6 +193,35 @@ strong,
   flex-direction: column;
   gap: 4px;
   min-width: 220px;
+}
+
+.topbar-controls {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+}
+
+.refresh-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 330px;
+}
+
+.refresh-box label {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.refresh-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.hotkeys-hint {
+  font-size: 0.73rem;
+  color: var(--muted);
 }
 
 .actor-box label {
@@ -561,6 +598,33 @@ textarea:focus {
   overflow-x: auto;
 }
 
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: grid;
+  place-items: center;
+  z-index: 20;
+}
+
+.confirm-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 16px;
+  width: min(420px, 92vw);
+}
+
+.confirm-card h4 {
+  margin: 0 0 8px;
+}
+
+.confirm-card p {
+  margin: 0 0 14px;
+  color: var(--muted);
+}
+
 .matrix-table th,
 .matrix-table td {
   min-width: 170px;
@@ -690,6 +754,9 @@ textarea:focus {
   }
 
   .sidebar {
+    position: relative;
+    top: auto;
+    height: auto;
     border-right: none;
     border-bottom: 1px solid var(--line);
   }
@@ -702,6 +769,16 @@ textarea:focus {
   .topbar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .topbar-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .refresh-box,
+  .actor-box {
+    min-width: 0;
   }
 
   .actor-box {

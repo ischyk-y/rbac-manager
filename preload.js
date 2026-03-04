@@ -1,34 +1,57 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+const rawDebugDelay = Number(process.env.DEBUG_DELAY_MS || 0);
+const DEBUG_DELAY_MS = Number.isFinite(rawDebugDelay) && rawDebugDelay > 0 ? rawDebugDelay : 0;
+const DEBUG_FORCE_ERROR = String(process.env.DEBUG_FORCE_ERROR || '') === '1';
+const DEBUG_FORCE_ERROR_CHANNELS = new Set(
+  String(process.env.DEBUG_FORCE_ERROR_CHANNELS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+);
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const invoke = async (...args) => {
+  const channel = String(args[0] || '');
+  const shouldForceError = DEBUG_FORCE_ERROR || DEBUG_FORCE_ERROR_CHANNELS.has(channel);
+  if (shouldForceError) {
+    throw new Error(`Debug forced IPC error: ${channel || 'unknown-channel'}`);
+  }
+  if (DEBUG_DELAY_MS > 0) await wait(DEBUG_DELAY_MS);
+  return ipcRenderer.invoke(...args);
+};
+
 contextBridge.exposeInMainWorld('api', {
   rbac: {
-    getOverview: () => ipcRenderer.invoke('rbac/getOverview'),
-    getCatalogs: () => ipcRenderer.invoke('rbac/getCatalogs'),
+    getOverview: () => invoke('rbac/getOverview'),
+    getCatalogs: () => invoke('rbac/getCatalogs'),
 
-    getUsers: (query) => ipcRenderer.invoke('rbac/getUsers', query),
-    upsertUser: (payload) => ipcRenderer.invoke('rbac/upsertUser', payload),
-    deleteUser: (payload) => ipcRenderer.invoke('rbac/deleteUser', payload),
-    getUserAssignments: (payload) => ipcRenderer.invoke('rbac/getUserAssignments', payload),
-    updateUserRoles: (payload) => ipcRenderer.invoke('rbac/updateUserRoles', payload),
-    updateUserGroups: (payload) => ipcRenderer.invoke('rbac/updateUserGroups', payload),
-    previewEffectivePermissions: (payload) => ipcRenderer.invoke('rbac/previewEffectivePermissions', payload),
+    getUsers: (query) => invoke('rbac/getUsers', query),
+    upsertUser: (payload) => invoke('rbac/upsertUser', payload),
+    deleteUser: (payload) => invoke('rbac/deleteUser', payload),
+    getUserAssignments: (payload) => invoke('rbac/getUserAssignments', payload),
+    updateUserRoles: (payload) => invoke('rbac/updateUserRoles', payload),
+    updateUserGroups: (payload) => invoke('rbac/updateUserGroups', payload),
+    previewEffectivePermissions: (payload) => invoke('rbac/previewEffectivePermissions', payload),
 
-    getRoles: () => ipcRenderer.invoke('rbac/getRoles'),
-    upsertRole: (payload) => ipcRenderer.invoke('rbac/upsertRole', payload),
+    getRoles: () => invoke('rbac/getRoles'),
+    upsertRole: (payload) => invoke('rbac/upsertRole', payload),
 
-    getGroups: () => ipcRenderer.invoke('rbac/getGroups'),
-    upsertGroup: (payload) => ipcRenderer.invoke('rbac/upsertGroup', payload),
-    getGroupAssignments: (payload) => ipcRenderer.invoke('rbac/getGroupAssignments', payload),
-    updateGroupRoles: (payload) => ipcRenderer.invoke('rbac/updateGroupRoles', payload),
-    updateGroupMembers: (payload) => ipcRenderer.invoke('rbac/updateGroupMembers', payload),
+    getGroups: () => invoke('rbac/getGroups'),
+    upsertGroup: (payload) => invoke('rbac/upsertGroup', payload),
+    getGroupAssignments: (payload) => invoke('rbac/getGroupAssignments', payload),
+    updateGroupRoles: (payload) => invoke('rbac/updateGroupRoles', payload),
+    updateGroupMembers: (payload) => invoke('rbac/updateGroupMembers', payload),
 
-    getMatrixData: () => ipcRenderer.invoke('rbac/getMatrixData'),
-    updateRoleResourcePermissions: (payload) => ipcRenderer.invoke('rbac/updateRoleResourcePermissions', payload),
+    getMatrixData: () => invoke('rbac/getMatrixData'),
+    updateRoleResourcePermissions: (payload) => invoke('rbac/updateRoleResourcePermissions', payload),
 
-    getAuditLogs: (query) => ipcRenderer.invoke('rbac/getAuditLogs', query),
-    exportAuditLogs: (payload) => ipcRenderer.invoke('rbac/exportAuditLogs', payload)
+    getAuditLogs: (query) => invoke('rbac/getAuditLogs', query),
+    exportAuditLogs: (payload) => invoke('rbac/exportAuditLogs', payload),
+    exportUsersCsv: (payload) => invoke('rbac/exportUsersCsv', payload),
+    importUsersCsv: (payload) => invoke('rbac/importUsersCsv', payload)
   },
   native: {
-    notify: (payload) => ipcRenderer.invoke('native/notify', payload)
+    notify: (payload) => invoke('native/notify', payload)
   }
 });
